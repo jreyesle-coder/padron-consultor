@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Modal,
   ScrollView,
   StyleSheet,
@@ -215,7 +216,18 @@ export default function HomeScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.header}>
-        <Text style={styles.titulo}>Consultor de Padrón PRM</Text>
+        <Image
+          source={require('../../assets/images/logo-prm.png')}
+          style={styles.logoPRM}
+          resizeMode="contain"
+        />
+        <Text style={styles.proyectoTitulo}>Proyecto Presidencial</Text>
+        <Text style={styles.proyectoNombre}>David Collado</Text>
+        <View style={styles.equipoRow}>
+          <View style={styles.divider} />
+          <Text style={styles.equipoTxt}>Equipo de Trabajo · Victor Ogando</Text>
+          <View style={styles.divider} />
+        </View>
       </View>
 
       <View style={styles.searchCard}>
@@ -367,8 +379,13 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { padding: 12, paddingBottom: 50, backgroundColor: '#f0f2f5' },
-  header: { alignItems: 'center', marginBottom: 10, paddingTop: 6 },
-  titulo: { fontSize: 17, fontWeight: 'bold', color: '#0a4f6e' },
+  header: { alignItems: 'center', marginBottom: 10, paddingTop: 10, paddingBottom: 12, paddingHorizontal: 16, backgroundColor: '#fff', borderRadius: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.07, shadowRadius: 4, elevation: 2 },
+  logoPRM: { width: 90, height: 90, marginBottom: 6 },
+  proyectoTitulo: { fontSize: 11, color: '#888', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 },
+  proyectoNombre: { fontSize: 20, fontWeight: '900', color: '#0a4f6e', marginTop: 1, letterSpacing: 0.3 },
+  equipoRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 8 },
+  divider: { flex: 1, height: 1, backgroundColor: '#e0e0e0' },
+  equipoTxt: { fontSize: 11, color: '#888', fontWeight: '500' },
   searchCard: { backgroundColor: '#fff', borderRadius: 12, padding: 10, marginBottom: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 3, elevation: 2 },
   searchRow: { flexDirection: 'row', gap: 8 },
   searchInput: { flex: 1, borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: '#222', backgroundColor: '#fafafa' },
