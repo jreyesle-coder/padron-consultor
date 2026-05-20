@@ -46,6 +46,7 @@ export default function CampoScreen() {
   const [abierto, setAbierto] = useState<number | null>(null);
   const [filtroCirc, setFiltroCirc] = useState<number | 'todos'>('todos');
   const [modalRed, setModalRed] = useState<{ lider: Lider; items: RedItem[]; cargando: boolean } | null>(null);
+  const [modalCompartir, setModalCompartir] = useState<{ lider: Lider; texto: string } | null>(null);
 
   const cargarLideres = useCallback(async () => {
     setCargando(true);
@@ -250,6 +251,52 @@ export default function CampoScreen() {
     if (win) { win.document.write(html); win.document.close(); }
   };
 
+  const compartirEquipo = async (l: Lider) => {
+    let equipo = colaboradores[l.id];
+    if (!equipo) {
+      const { data } = await supabase.from('colaboradores_campo').select('*').eq('lider_id', l.id).order('nombre');
+      equipo = data || [];
+      setColaboradores(prev => ({ ...prev, [l.id]: equipo }));
+    }
+
+    const meta = [
+      l.circunscripcion ? `CIR-${l.circunscripcion}` : null,
+      l.municipio,
+      l.colegio ? `Mesa ${l.colegio}` : null,
+    ].filter(Boolean).join(' · ');
+
+    const lineas = equipo.map((c, i) =>
+      `${i + 1}. ${c.nombre}${c.colegio ? ` · Mesa ${c.colegio}` : ''}`
+    ).join('\n');
+
+    const fecha = new Date().toLocaleDateString('es-DO', { day: 'numeric', month: 'long', year: 'numeric' });
+
+    const texto = [
+      `★ Equipo de ${l.nombre}`,
+      `Proyecto Presidencial David Collado`,
+      `Equipo de Trabajo · Victor Ogando`,
+      meta || null,
+      `──────────────────────`,
+      lineas || 'Sin colaboradores aún',
+      `──────────────────────`,
+      `Total: ${equipo.length} colaboradores`,
+      `Generado el ${fecha}`,
+    ].filter(Boolean).join('\n');
+
+    // Intentar Web Share API (funciona en móvil con HTTPS)
+    if (typeof navigator !== 'undefined' && (navigator as any).share) {
+      try {
+        await (navigator as any).share({ title: `Equipo de ${l.nombre}`, text: texto });
+        return;
+      } catch (_) {
+        // Usuario canceló o no soportado → mostrar fallback
+      }
+    }
+
+    // Fallback: mostrar modal con opciones
+    setModalCompartir({ lider: l, texto });
+  };
+
   const getSubLideres = (lid: number) => lideres.filter(l => l.parent_lider_id === lid);
 
   // Solo líderes raíz en la lista principal
@@ -397,9 +444,14 @@ export default function CampoScreen() {
                   <TouchableOpacity style={styles.btnVerRed} onPress={() => verRedCompleta(l, lideres)}>
                     <Text style={styles.btnVerRedTxt}>🔗 Ver red completa</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.btnImprimir} onPress={() => imprimirEquipo(l)}>
-                    <Text style={styles.btnImprimirTxt}>🖨 Imprimir equipo PDF</Text>
-                  </TouchableOpacity>
+                  <View style={styles.btnRow}>
+                    <TouchableOpacity style={[styles.btnImprimir, { flex: 1 }]} onPress={() => imprimirEquipo(l)}>
+                      <Text style={styles.btnImprimirTxt}>🖨 Imprimir PDF</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.btnCompartir, { flex: 1 }]} onPress={() => compartirEquipo(l)}>
+                      <Text style={styles.btnCompartirTxt}>📤 Compartir</Text>
+                    </TouchableOpacity>
+                  </View>
                   <TouchableOpacity style={styles.btnEliminarLider} onPress={() => eliminarLider(l)}>
                     <Text style={styles.btnEliminarLiderTxt}>Quitar como líder</Text>
                   </TouchableOpacity>
@@ -409,6 +461,47 @@ export default function CampoScreen() {
           </View>
         );
       })}
+
+      {/* Modal: compartir */}
+      <Modal
+        visible={!!modalCompartir}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setModalCompartir(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            {modalCompartir && (
+              <>
+                <Text style={styles.modalTitulo}>Compartir equipo</Text>
+                <Text style={styles.modalSubtitulo}>
+                  Elegí cómo compartir el equipo de {modalCompartir.lider.nombre}
+                </Text>
+                <TouchableOpacity
+                  style={styles.btnWhatsapp}
+                  onPress={() => {
+                    window.open(`https://wa.me/?text=${encodeURIComponent(modalCompartir.texto)}`, '_blank');
+                    setModalCompartir(null);
+                  }}>
+                  <Text style={styles.btnWhatsappTxt}>💬  Enviar por WhatsApp</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.btnEmail}
+                  onPress={() => {
+                    const asunto = encodeURIComponent(`Equipo de ${modalCompartir.lider.nombre}`);
+                    const cuerpo = encodeURIComponent(modalCompartir.texto);
+                    window.open(`mailto:?subject=${asunto}&body=${cuerpo}`, '_blank');
+                    setModalCompartir(null);
+                  }}>
+                  <Text style={styles.btnEmailTxt}>✉️  Enviar por correo</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalCerrar} onPress={() => setModalCompartir(null)}>
+                  <Text style={styles.modalCerrarTxt}>Cancelar</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal: red completa */}
       <Modal
@@ -527,8 +620,15 @@ const styles = StyleSheet.create({
   footerBtns: { marginTop: 12, gap: 8 },
   btnVerRed: { borderWidth: 1, borderColor: '#0a7ea4', borderRadius: 7, paddingVertical: 9, alignItems: 'center' },
   btnVerRedTxt: { color: '#0a7ea4', fontSize: 13, fontWeight: '600' },
+  btnRow: { flexDirection: 'row', gap: 8 },
   btnImprimir: { backgroundColor: '#0a4f6e', borderRadius: 7, paddingVertical: 10, alignItems: 'center' },
   btnImprimirTxt: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  btnCompartir: { backgroundColor: '#0a7ea4', borderRadius: 7, paddingVertical: 10, alignItems: 'center' },
+  btnCompartirTxt: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  btnWhatsapp: { backgroundColor: '#25D366', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginBottom: 10 },
+  btnWhatsappTxt: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  btnEmail: { backgroundColor: '#0a4f6e', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginBottom: 10 },
+  btnEmailTxt: { color: '#fff', fontSize: 16, fontWeight: '700' },
   btnEliminarLider: { borderWidth: 1, borderColor: '#ffcccc', borderRadius: 7, paddingVertical: 9, alignItems: 'center' },
   btnEliminarLiderTxt: { color: '#e05050', fontSize: 13 },
   // Modal
