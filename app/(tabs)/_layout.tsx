@@ -1,8 +1,6 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-
 import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
 
 export default function TabLayout() {
   return (
@@ -11,12 +9,12 @@ export default function TabLayout() {
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarActiveTintColor: '#fff',
-        tabBarInactiveTintColor: 'rgba(255,255,255,0.55)',
+        tabBarInactiveTintColor: 'rgba(255,255,255,0.6)',
         tabBarStyle: {
-          height: 68,
-          paddingBottom: 10,
-          paddingTop: 8,
-          paddingHorizontal: 8,
+          height: 58,
+          paddingBottom: 6,
+          paddingTop: 6,
+          paddingHorizontal: 6,
           backgroundColor: '#0a4f6e',
           borderTopWidth: 0,
           elevation: 12,
@@ -26,37 +24,31 @@ export default function TabLayout() {
           shadowRadius: 8,
         },
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: 14,
           fontWeight: '700',
-          marginTop: 2,
+          textTransform: 'uppercase',
+          letterSpacing: 0.5,
         },
         tabBarActiveBackgroundColor: '#0a7ea4',
         tabBarInactiveBackgroundColor: 'transparent',
         tabBarItemStyle: {
-          borderRadius: 10,
-          marginHorizontal: 4,
+          borderRadius: 8,
+          marginHorizontal: 3,
+          height: 46,
+          justifyContent: 'center',
         },
       }}>
       <Tabs.Screen
         name="index"
-        options={{
-          title: 'Búsqueda',
-          tabBarIcon: ({ color }) => <IconSymbol size={26} name="magnifyingglass" color={color} />,
-        }}
+        options={{ title: 'Búsqueda', tabBarIcon: () => null }}
       />
       <Tabs.Screen
         name="campo"
-        options={{
-          title: 'Equipos',
-          tabBarIcon: ({ color }) => <IconSymbol size={26} name="person.3.fill" color={color} />,
-        }}
+        options={{ title: 'Equipos', tabBarIcon: () => null }}
       />
       <Tabs.Screen
         name="explore"
-        options={{
-          title: 'Resumen',
-          tabBarIcon: ({ color }) => <IconSymbol size={26} name="chart.bar.fill" color={color} />,
-        }}
+        options={{ title: 'Resumen', tabBarIcon: () => null }}
       />
     </Tabs>
   );
