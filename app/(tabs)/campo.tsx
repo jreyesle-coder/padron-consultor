@@ -165,6 +165,91 @@ export default function CampoScreen() {
     setModalRed({ lider: l, items, cargando: false });
   };
 
+  const imprimirEquipo = async (l: Lider) => {
+    // Asegurarse de tener los colaboradores cargados
+    let equipo = colaboradores[l.id];
+    if (!equipo) {
+      const { data } = await supabase.from('colaboradores_campo').select('*').eq('lider_id', l.id).order('nombre');
+      equipo = data || [];
+      setColaboradores(prev => ({ ...prev, [l.id]: equipo }));
+    }
+
+    const logoUrl = 'https://vectorseek.com/wp-content/uploads/2023/09/Partido-Revolucionario-Moderno-Republica-Dominican-Logo-Vector.svg-.png';
+    const fecha = new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' });
+    const meta = [
+      l.circunscripcion ? `Circunscripción ${l.circunscripcion}` : null,
+      l.municipio,
+      l.colegio ? `Mesa ${l.colegio}` : null,
+      l.celular ? `Tel: ${l.celular}` : null,
+    ].filter(Boolean).join(' · ');
+
+    const filas = equipo.map((c, i) => `
+      <tr>
+        <td style="text-align:center">${i + 1}</td>
+        <td>${c.nombre}</td>
+        <td>${c.cedula}</td>
+        <td style="text-align:center">${c.colegio ? c.colegio.trim() : '—'}</td>
+        <td>${c.municipio || '—'}</td>
+        <td style="text-align:center">${c.celular || '—'}</td>
+      </tr>
+    `).join('');
+
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+    <title>Equipo de ${l.nombre}</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font-family: Arial, sans-serif; color: #111; padding: 30px; }
+      .header { text-align: center; padding-bottom: 18px; border-bottom: 3px solid #0a4f6e; margin-bottom: 22px; }
+      .logo { width: 110px; height: 110px; object-fit: contain; }
+      .proyecto { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 10px; }
+      .david { font-size: 26px; font-weight: 900; color: #0a4f6e; margin: 3px 0; }
+      .victor { font-size: 14px; font-weight: 700; color: #0a7ea4; }
+      .lider-box { background: #f0f7ff; border-left: 5px solid #0a4f6e; border-radius: 6px; padding: 14px 18px; margin-bottom: 22px; }
+      .lider-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+      .lider-nombre { font-size: 20px; font-weight: 800; color: #0a4f6e; margin: 4px 0; }
+      .lider-meta { font-size: 12px; color: #555; }
+      .tabla-titulo { font-size: 13px; font-weight: 700; color: #333; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+      table { width: 100%; border-collapse: collapse; }
+      th { background: #0a4f6e; color: #fff; padding: 10px 8px; font-size: 12px; text-align: left; }
+      td { padding: 8px; font-size: 12px; border-bottom: 1px solid #eee; vertical-align: middle; }
+      tr:nth-child(even) td { background: #f8f9fa; }
+      .footer { margin-top: 24px; display: flex; justify-content: space-between; font-size: 10px; color: #aaa; border-top: 1px solid #eee; padding-top: 10px; }
+      @media print { body { padding: 15px; } }
+    </style></head><body>
+    <div class="header">
+      <img src="${logoUrl}" class="logo" />
+      <div class="proyecto">Proyecto Presidencial</div>
+      <div class="david">David Collado</div>
+      <div class="victor">Equipo de Trabajo · Victor Ogando</div>
+    </div>
+    <div class="lider-box">
+      <div class="lider-label">Líder de equipo</div>
+      <div class="lider-nombre">★ ${l.nombre}</div>
+      ${meta ? `<div class="lider-meta">${meta}</div>` : ''}
+    </div>
+    <div class="tabla-titulo">Equipo de trabajo (${equipo.length} colaboradores)</div>
+    <table>
+      <thead><tr>
+        <th style="width:36px">#</th>
+        <th>Nombre</th>
+        <th>Cédula</th>
+        <th style="width:60px">Mesa</th>
+        <th>Municipio</th>
+        <th style="width:100px">Teléfono</th>
+      </tr></thead>
+      <tbody>${filas}</tbody>
+    </table>
+    <div class="footer">
+      <span>Total: ${equipo.length} colaboradores</span>
+      <span>Generado el ${fecha}</span>
+    </div>
+    <script>window.onload = function(){ window.print(); }</script>
+    </body></html>`;
+
+    const win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); }
+  };
+
   const getSubLideres = (lid: number) => lideres.filter(l => l.parent_lider_id === lid);
 
   // Solo líderes raíz en la lista principal
@@ -312,6 +397,9 @@ export default function CampoScreen() {
                   <TouchableOpacity style={styles.btnVerRed} onPress={() => verRedCompleta(l, lideres)}>
                     <Text style={styles.btnVerRedTxt}>🔗 Ver red completa</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity style={styles.btnImprimir} onPress={() => imprimirEquipo(l)}>
+                    <Text style={styles.btnImprimirTxt}>🖨 Imprimir equipo PDF</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity style={styles.btnEliminarLider} onPress={() => eliminarLider(l)}>
                     <Text style={styles.btnEliminarLiderTxt}>Quitar como líder</Text>
                   </TouchableOpacity>
@@ -439,6 +527,8 @@ const styles = StyleSheet.create({
   footerBtns: { marginTop: 12, gap: 8 },
   btnVerRed: { borderWidth: 1, borderColor: '#0a7ea4', borderRadius: 7, paddingVertical: 9, alignItems: 'center' },
   btnVerRedTxt: { color: '#0a7ea4', fontSize: 13, fontWeight: '600' },
+  btnImprimir: { backgroundColor: '#0a4f6e', borderRadius: 7, paddingVertical: 10, alignItems: 'center' },
+  btnImprimirTxt: { color: '#fff', fontSize: 13, fontWeight: '700' },
   btnEliminarLider: { borderWidth: 1, borderColor: '#ffcccc', borderRadius: 7, paddingVertical: 9, alignItems: 'center' },
   btnEliminarLiderTxt: { color: '#e05050', fontSize: 13 },
   // Modal
