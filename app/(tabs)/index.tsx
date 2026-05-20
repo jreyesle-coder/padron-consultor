@@ -380,7 +380,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { padding: 12, paddingBottom: 50, backgroundColor: '#f0f2f5' },
   header: { alignItems: 'center', marginBottom: 10, paddingTop: 10, paddingBottom: 12, paddingHorizontal: 16, backgroundColor: '#fff', borderRadius: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.07, shadowRadius: 4, elevation: 2 },
-  logoPRM: { width: 160, height: 160, marginBottom: 6 },
+  logoPRM: { width: 160, height: 160, marginTop: 8, marginBottom: 10 },
   proyectoTitulo: { fontSize: 11, color: '#888', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 },
   proyectoNombre: { fontSize: 22, fontWeight: '900', color: '#0a4f6e', marginTop: 1, letterSpacing: 0.3 },
   equipoRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 8 },

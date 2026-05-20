@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
 
 type ResumenLider = {
@@ -79,6 +79,13 @@ export default function ResumenScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.header}>
+        <View style={styles.headerBand}>
+          <Image source={require('../../assets/images/logo-prm.png')} style={styles.logoPRM} resizeMode="contain" />
+          <View style={styles.headerTextos}>
+            <Text style={styles.headerProyecto}>Proyecto Presidencial David Collado</Text>
+            <Text style={styles.headerEquipo}>Equipo de Trabajo · Victor Ogando</Text>
+          </View>
+        </View>
         <Text style={styles.titulo}>Resumen General</Text>
       </View>
 
@@ -195,8 +202,13 @@ export default function ResumenScreen() {
 
 const styles = StyleSheet.create({
   container: { padding: 14, paddingBottom: 60, backgroundColor: '#f0f2f5' },
-  header: { alignItems: 'center', marginBottom: 16, paddingTop: 6 },
-  titulo: { fontSize: 18, fontWeight: 'bold', color: '#0a4f6e' },
+  header: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 14, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.07, shadowRadius: 3 },
+  headerBand: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  logoPRM: { width: 44, height: 44, marginRight: 10 },
+  headerTextos: { flex: 1 },
+  headerProyecto: { fontSize: 12, fontWeight: '700', color: '#0a4f6e' },
+  headerEquipo: { fontSize: 11, color: '#0a7ea4', fontWeight: '600', marginTop: 1 },
+  titulo: { fontSize: 18, fontWeight: 'bold', color: '#0a4f6e', textAlign: 'center' },
   metricasRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
   metricaCard: { flex: 1, borderRadius: 12, padding: 14, alignItems: 'center' },
   metricaAzul: { backgroundColor: '#0a7ea4' },
