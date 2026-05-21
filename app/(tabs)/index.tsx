@@ -59,10 +59,18 @@ export default function HomeScreen() {
   const [recintos, setRecintos] = useState<Map<number, RecintoInfo>>(new Map());
   const [expandido, setExpandido] = useState<number | null>(null);
 
-  // Modal para elegir líder al asignar colaborador
+  // Modal: elegir líder para colaborador
   const [modalLideres, setModalLideres] = useState(false);
   const [lideres, setLideres] = useState<Lider[]>([]);
   const [personaParaAsignar, setPersonaParaAsignar] = useState<Persona | null>(null);
+
+  // Modal: registro manual (persona no encontrada en padrón)
+  const [modalRegistroManual, setModalRegistroManual] = useState(false);
+  const [regNombre, setRegNombre] = useState('');
+  const [regCelular, setRegCelular] = useState('');
+  const [regMunicipio, setRegMunicipio] = useState('');
+  const [regCirc, setRegCirc] = useState('');
+  const [regLideres, setRegLideres] = useState<Lider[]>([]);
 
   useEffect(() => {
     supabase.from('recintos')
@@ -169,11 +177,16 @@ export default function HomeScreen() {
   };
 
   const confirmarLider = async (p: Persona) => {
+    let celularFinal = p.celular;
+    if (!celularFinal) {
+      const tel = window.prompt(`⚠️ ${p.nombre_completo} no tiene teléfono registrado.\nIngresá su número (recomendado para el equipo):`);
+      if (tel && tel.trim()) celularFinal = tel.trim();
+    }
     if (!confirm(`★ ¿Asignar a ${p.nombre_completo} como líder de campo?`)) return;
     const rec = p.id_recinto ? recintos.get(p.id_recinto) : null;
     const { error } = await supabase.from('lideres_campo').insert({
       cedula: normalizarCedula(p.cedula), nombre: p.nombre_completo,
-      celular: p.celular || null, provincia: p.provincia || rec?.provincia || null,
+      celular: celularFinal || null, provincia: p.provincia || rec?.provincia || null,
       municipio: p.municipio || rec?.municipio || null,
       circunscripcion: rec?.circunscripcion || null,
       id_recinto: p.id_recinto || null, colegio: p.colegio || null,
@@ -183,7 +196,13 @@ export default function HomeScreen() {
   };
 
   const iniciarAsignarColaborador = async (p: Persona) => {
-    setPersonaParaAsignar(p);
+    let celularFinal = p.celular;
+    if (!celularFinal) {
+      const tel = window.prompt(`⚠️ ${p.nombre_completo} no tiene teléfono registrado.\nIngresá su número (recomendado para el equipo):`);
+      if (tel && tel.trim()) celularFinal = tel.trim();
+    }
+    const personaConTel = celularFinal !== p.celular ? { ...p, celular: celularFinal } : p;
+    setPersonaParaAsignar(personaConTel);
     const { data } = await supabase
       .from('lideres_campo')
       .select('id, nombre, circunscripcion, parent_lider_id')
@@ -207,6 +226,41 @@ export default function HomeScreen() {
     });
     if (error) notify(error.code === '23505' ? `${p.nombre_completo} ya está registrado como colaborador.` : `Error: ${error.message}`);
     else notify(`✓ ${p.nombre_completo} agregado al equipo de ${lider.nombre}.`);
+  };
+
+  const abrirRegistroManual = async () => {
+    setRegNombre('');
+    setRegCelular('');
+    setRegMunicipio('');
+    setRegCirc('');
+    const { data } = await supabase
+      .from('lideres_campo')
+      .select('id, nombre, circunscripcion, parent_lider_id')
+      .order('parent_lider_id', { nullsFirst: true })
+      .order('nombre');
+    setRegLideres(data || []);
+    setModalRegistroManual(true);
+  };
+
+  const guardarRegistroManual = async (lider: Lider) => {
+    if (!regNombre.trim()) { notify('El nombre completo es obligatorio.'); return; }
+    if (!regCelular.trim()) { notify('El teléfono es obligatorio para el equipo.'); return; }
+    const cedula = normalizarCedula(busqueda);
+    const { error } = await supabase.from('colaboradores_campo').insert({
+      cedula,
+      nombre: regNombre.trim().toUpperCase(),
+      celular: regCelular.trim(),
+      municipio: regMunicipio.trim() || null,
+      circunscripcion: regCirc.trim() ? parseInt(regCirc) : null,
+      lider_id: lider.id,
+      pendiente_padron: true,
+    });
+    if (error) {
+      notify(error.code === '23505' ? 'Esta cédula ya está registrada en el sistema.' : `Error: ${error.message}`);
+      return;
+    }
+    setModalRegistroManual(false);
+    notify(`✓ ${regNombre.trim()} agregado al equipo de ${lider.nombre}.\n\n⚠️ Recordá inscribirlo en el padrón PRM:\nverificate.prm.do`);
   };
 
   const limpiar = () => { setBusqueda(''); setProvinciaFiltro(''); setMunicipioFiltro(''); setResultados([]); setModoBusqueda(null); setExpandido(null); };
@@ -262,10 +316,37 @@ export default function HomeScreen() {
       </View>
 
       {resultados.length === 0 && !cargando ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>🔍</Text>
-          <Text style={styles.emptyTxt}>Ingresá un nombre o cédula</Text>
-        </View>
+        modoBusqueda === null ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>🔍</Text>
+            <Text style={styles.emptyTxt}>Ingresá un nombre o cédula</Text>
+          </View>
+        ) : (
+          <View>
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>🔍</Text>
+              <Text style={styles.emptyTxt}>No encontrado en el padrón</Text>
+            </View>
+            {modoBusqueda === 'cedula' && (
+              <View style={styles.noEncontradoCard}>
+                <Text style={styles.noEncontradoTitulo}>⚠️ Cédula no encontrada en el padrón PRM</Text>
+                <Text style={styles.noEncontradoDesc}>
+                  Esta persona puede no estar inscrita en el PRM. Podés agregarla a tu equipo igualmente y luego registrarla en el partido.
+                </Text>
+                <View style={styles.noEncontradoBtns}>
+                  <TouchableOpacity style={styles.btnRegistrar} onPress={abrirRegistroManual}>
+                    <Text style={styles.btnRegistrarTxt}>📝 Agregar al equipo</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.btnPRM}
+                    onPress={() => window.open('https://verificate.prm.do/', '_blank')}>
+                    <Text style={styles.btnPRMTxt}>🔗 Inscribir en PRM</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
+        )
       ) : (
         <>
           {resultados.map((p, i) => {
@@ -284,7 +365,10 @@ export default function HomeScreen() {
                   </View>
                   <View style={styles.inlineRow}>
                     <Text style={styles.inlineVal}>{p.cedula || '—'}</Text>
-                    {p.celular ? <><Text style={styles.inlineSep}> · </Text><Text style={styles.inlineVal}>{p.celular}</Text></> : null}
+                    {p.celular
+                      ? <><Text style={styles.inlineSep}> · </Text><Text style={styles.inlineVal}>{p.celular}</Text></>
+                      : <Text style={styles.sinTelTxt}> · ⚠️ Sin teléfono</Text>
+                    }
                   </View>
                   {(p.provincia || rec) ? (
                     <View style={styles.inlineRow}>
@@ -330,7 +414,7 @@ export default function HomeScreen() {
         </>
       )}
 
-      {/* Modal selección de líder para colaborador */}
+      {/* Modal: selección de líder para colaborador existente */}
       <Modal visible={modalLideres} transparent animationType="slide" onRequestClose={() => setModalLideres(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
@@ -373,6 +457,104 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Modal: registro manual de persona no encontrada en padrón */}
+      <Modal visible={modalRegistroManual} transparent animationType="slide" onRequestClose={() => setModalRegistroManual(false)}>
+        <View style={styles.modalOverlay}>
+          <ScrollView style={styles.modalBoxScroll} contentContainerStyle={{ paddingBottom: 40 }}>
+            <Text style={styles.modalTitulo}>📝 Registrar en el equipo</Text>
+            <View style={styles.pendienteAviso}>
+              <Text style={styles.pendienteAvisoTxt}>
+                ⚠️ Esta persona no está en el padrón PRM. Será marcada como pendiente de inscripción al partido.
+              </Text>
+            </View>
+
+            <Text style={styles.regLabel}>Cédula</Text>
+            <View style={styles.regInputReadonly}>
+              <Text style={styles.regInputReadonlyTxt}>{formatearCedula(busqueda)}</Text>
+            </View>
+
+            <Text style={styles.regLabel}>Nombre completo <Text style={styles.regReq}>*</Text></Text>
+            <TextInput
+              style={styles.regInput}
+              placeholder="Ej: JUAN PÉREZ GARCÍA"
+              placeholderTextColor="#bbb"
+              value={regNombre}
+              onChangeText={setRegNombre}
+              autoCapitalize="characters"
+            />
+
+            <Text style={styles.regLabel}>Teléfono <Text style={styles.regReq}>* obligatorio</Text></Text>
+            <TextInput
+              style={styles.regInput}
+              placeholder="Ej: 809-555-0000"
+              placeholderTextColor="#bbb"
+              value={regCelular}
+              onChangeText={setRegCelular}
+              keyboardType="phone-pad"
+            />
+
+            <Text style={styles.regLabel}>Municipio</Text>
+            <TextInput
+              style={styles.regInput}
+              placeholder="Ej: DISTRITO NACIONAL"
+              placeholderTextColor="#bbb"
+              value={regMunicipio}
+              onChangeText={setRegMunicipio}
+              autoCapitalize="characters"
+            />
+
+            <Text style={styles.regLabel}>Circunscripción</Text>
+            <TextInput
+              style={styles.regInput}
+              placeholder="Ej: 1"
+              placeholderTextColor="#bbb"
+              value={regCirc}
+              onChangeText={setRegCirc}
+              keyboardType="number-pad"
+            />
+
+            <Text style={[styles.modalSeccion, { marginTop: 16, marginBottom: 6 }]}>Asignar al equipo de:</Text>
+            {regLideres.length === 0 && (
+              <Text style={styles.sinLideres}>No hay líderes registrados aún.</Text>
+            )}
+            {regLideres.filter(l => !l.parent_lider_id).map(l => (
+              <TouchableOpacity key={l.id} style={styles.liderOpcion} onPress={() => guardarRegistroManual(l)}>
+                <View style={styles.liderOpcionIcon}><Text style={{ color: '#fff', fontSize: 11 }}>★</Text></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.liderOpcionNombre}>{l.nombre}</Text>
+                  {l.circunscripcion ? <Text style={styles.liderOpcionZona}>CIR-{l.circunscripcion}</Text> : null}
+                </View>
+              </TouchableOpacity>
+            ))}
+            {regLideres.filter(l => !!l.parent_lider_id).length > 0 && (
+              <Text style={styles.modalSeccion}>Sub-líderes</Text>
+            )}
+            {regLideres.filter(l => !!l.parent_lider_id).map(l => {
+              const padre = regLideres.find(x => x.id === l.parent_lider_id);
+              return (
+                <TouchableOpacity key={l.id} style={styles.liderOpcionSub} onPress={() => guardarRegistroManual(l)}>
+                  <View style={styles.liderOpcionIconSub}><Text style={{ color: '#fff', fontSize: 10 }}>★</Text></View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.liderOpcionNombreSub}>{l.nombre}</Text>
+                    <Text style={styles.liderOpcionZona}>Sub-líder de {padre?.nombre ?? '—'}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+
+            <TouchableOpacity
+              style={styles.btnPRMGrande}
+              onPress={() => window.open('https://verificate.prm.do/', '_blank')}>
+              <Text style={styles.btnPRMGrandeTxt}>🔗 Inscribir en el padrón PRM → verificate.prm.do</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.modalCancelar} onPress={() => setModalRegistroManual(false)}>
+              <Text style={styles.modalCancelarTxt}>Cancelar</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -403,9 +585,19 @@ const styles = StyleSheet.create({
   resultsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, paddingHorizontal: 2 },
   resultsCount: { fontSize: 13, fontWeight: '600', color: '#555' },
   limpiarTxt: { color: '#0a7ea4', fontSize: 13 },
-  emptyState: { alignItems: 'center', paddingVertical: 50 },
+  emptyState: { alignItems: 'center', paddingVertical: 40 },
   emptyIcon: { fontSize: 36, marginBottom: 8 },
   emptyTxt: { color: '#999', fontSize: 14 },
+  // Panel "no encontrado"
+  noEncontradoCard: { backgroundColor: '#fff8e6', borderRadius: 12, padding: 14, marginBottom: 12, borderLeftWidth: 4, borderLeftColor: '#f5a623' },
+  noEncontradoTitulo: { fontSize: 14, fontWeight: '700', color: '#7a4f00', marginBottom: 6 },
+  noEncontradoDesc: { fontSize: 12, color: '#9a6500', lineHeight: 18, marginBottom: 12 },
+  noEncontradoBtns: { flexDirection: 'row', gap: 8 },
+  btnRegistrar: { flex: 1, backgroundColor: '#0a4f6e', borderRadius: 8, paddingVertical: 10, alignItems: 'center' },
+  btnRegistrarTxt: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  btnPRM: { flex: 1, borderWidth: 1.5, borderColor: '#0a4f6e', borderRadius: 8, paddingVertical: 10, alignItems: 'center' },
+  btnPRMTxt: { color: '#0a4f6e', fontSize: 13, fontWeight: '700' },
+  // Tarjeta de resultado
   tarjeta: { backgroundColor: '#fff', borderRadius: 10, padding: 10, marginBottom: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 2, elevation: 1 },
   tarjetaHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 },
   nombre: { flex: 1, fontSize: 14, fontWeight: '700', color: '#111', marginRight: 8 },
@@ -418,6 +610,7 @@ const styles = StyleSheet.create({
   inlineRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2, flexWrap: 'wrap' },
   inlineVal: { fontSize: 12, color: '#555' },
   inlineSep: { fontSize: 11, color: '#ccc', marginHorizontal: 2 },
+  sinTelTxt: { fontSize: 11, color: '#e08000', fontWeight: '600' },
   zonaResumen: { fontSize: 11, color: '#0a4f6e', marginTop: 1 },
   expandHint: { fontSize: 10, color: '#ccc', textAlign: 'center', marginTop: 3 },
   detalle: { marginTop: 8, borderTopWidth: 1, borderTopColor: '#f0f0f0', paddingTop: 8 },
@@ -432,9 +625,10 @@ const styles = StyleSheet.create({
   btnColaborador: { flex: 1, backgroundColor: '#0a7ea4', borderRadius: 7, paddingVertical: 9, alignItems: 'center' },
   btnAccionTxt: { color: '#fff', fontSize: 13, fontWeight: '700' },
   cargarMasBtn: { backgroundColor: '#555', paddingVertical: 11, borderRadius: 8, alignItems: 'center', marginTop: 4 },
-  // Modal
+  // Modal base
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalBox: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, paddingBottom: 40 },
+  modalBoxScroll: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, maxHeight: '90%' },
   modalTitulo: { fontSize: 16, fontWeight: '700', color: '#0a4f6e', marginBottom: 10 },
   modalSeccion: { fontSize: 10, fontWeight: '800', color: '#aaa', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 10, marginBottom: 2 },
   liderOpcion: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#f0f0f0', gap: 10 },
@@ -447,4 +641,14 @@ const styles = StyleSheet.create({
   sinLideres: { textAlign: 'center', color: '#999', fontSize: 13, paddingVertical: 20, lineHeight: 20 },
   modalCancelar: { marginTop: 16, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 8 },
   modalCancelarTxt: { color: '#666', fontSize: 14 },
+  // Registro manual
+  pendienteAviso: { backgroundColor: '#fff8e6', borderRadius: 8, padding: 10, marginBottom: 14, borderLeftWidth: 3, borderLeftColor: '#f5a623' },
+  pendienteAvisoTxt: { fontSize: 12, color: '#7a4f00', lineHeight: 17 },
+  regLabel: { fontSize: 11, fontWeight: '700', color: '#555', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4, marginTop: 10 },
+  regReq: { color: '#e05050', fontWeight: '700', textTransform: 'none' },
+  regInput: { borderWidth: 1, borderColor: '#d0d0d0', borderRadius: 8, paddingHorizontal: 11, paddingVertical: 9, fontSize: 14, color: '#222', backgroundColor: '#fafafa' },
+  regInputReadonly: { borderWidth: 1, borderColor: '#e8e8e8', borderRadius: 8, paddingHorizontal: 11, paddingVertical: 9, backgroundColor: '#f5f5f5' },
+  regInputReadonlyTxt: { fontSize: 14, color: '#888', fontWeight: '600' },
+  btnPRMGrande: { marginTop: 16, borderWidth: 1.5, borderColor: '#0a4f6e', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  btnPRMGrandeTxt: { color: '#0a4f6e', fontSize: 13, fontWeight: '700' },
 });

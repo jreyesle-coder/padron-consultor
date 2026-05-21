@@ -27,6 +27,7 @@ type Colaborador = {
   colegio: string | null;
   municipio: string | null;
   lider_id: number | null;
+  pendiente_padron?: boolean;
 };
 
 type RedItem = {
@@ -177,21 +178,16 @@ export default function CampoScreen() {
 
     const logoUrl = 'https://vectorseek.com/wp-content/uploads/2023/09/Partido-Revolucionario-Moderno-Republica-Dominican-Logo-Vector.svg-.png';
     const fecha = new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' });
-    const meta = [
-      l.circunscripcion ? `Circunscripción ${l.circunscripcion}` : null,
-      l.municipio,
-      l.colegio ? `Mesa ${l.colegio}` : null,
-      l.celular ? `Tel: ${l.celular}` : null,
-    ].filter(Boolean).join(' · ');
+    const pendientes = equipo.filter((c: Colaborador) => c.pendiente_padron).length;
 
-    const filas = equipo.map((c, i) => `
+    const filas = equipo.map((c: Colaborador, i: number) => `
       <tr>
         <td style="text-align:center">${i + 1}</td>
-        <td>${c.nombre}</td>
+        <td>${c.nombre}${c.pendiente_padron ? ' <span class="pend">⚠️</span>' : ''}</td>
         <td>${c.cedula}</td>
         <td style="text-align:center">${c.colegio ? c.colegio.trim() : '—'}</td>
         <td>${c.municipio || '—'}</td>
-        <td style="text-align:center">${c.celular || '—'}</td>
+        <td style="text-align:center">${c.celular || '<span style="color:#e08000">Sin tel</span>'}</td>
       </tr>
     `).join('');
 
@@ -214,6 +210,12 @@ export default function CampoScreen() {
       th { background: #0a4f6e; color: #fff; padding: 10px 8px; font-size: 12px; text-align: left; }
       td { padding: 8px; font-size: 12px; border-bottom: 1px solid #eee; vertical-align: middle; }
       tr:nth-child(even) td { background: #f8f9fa; }
+      .zona-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+      .zona-item { background: #fff; border-radius: 6px; padding: 6px 10px; min-width: 110px; }
+      .zona-key { display: block; font-size: 9px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+      .zona-val { display: block; font-size: 13px; font-weight: 700; color: #0a4f6e; margin-top: 2px; }
+      .pend { font-size: 10px; }
+      .nota-pend { margin-top: 10px; font-size: 11px; color: #9a6500; background: #fff8e6; border-left: 3px solid #f5a623; padding: 6px 10px; border-radius: 4px; }
       .footer { margin-top: 24px; display: flex; justify-content: space-between; font-size: 10px; color: #aaa; border-top: 1px solid #eee; padding-top: 10px; }
       @media print { body { padding: 15px; } }
     </style></head><body>
@@ -226,7 +228,13 @@ export default function CampoScreen() {
     <div class="lider-box">
       <div class="lider-label">Líder de equipo</div>
       <div class="lider-nombre">★ ${l.nombre}</div>
-      ${meta ? `<div class="lider-meta">${meta}</div>` : ''}
+      ${l.celular ? `<div class="lider-meta" style="margin-top:4px">📱 ${l.celular}</div>` : ''}
+      <div class="zona-grid">
+        ${l.provincia ? `<div class="zona-item"><span class="zona-key">Provincia</span><span class="zona-val">${l.provincia}</span></div>` : ''}
+        ${l.circunscripcion ? `<div class="zona-item"><span class="zona-key">Circunscripción</span><span class="zona-val">${l.circunscripcion}</span></div>` : ''}
+        ${l.municipio ? `<div class="zona-item"><span class="zona-key">Municipio</span><span class="zona-val">${l.municipio}</span></div>` : ''}
+        ${l.colegio ? `<div class="zona-item"><span class="zona-key">Mesa</span><span class="zona-val">${l.colegio.trim()}</span></div>` : ''}
+      </div>
     </div>
     <div class="tabla-titulo">Equipo de trabajo (${equipo.length} colaboradores)</div>
     <table>
@@ -240,6 +248,7 @@ export default function CampoScreen() {
       </tr></thead>
       <tbody>${filas}</tbody>
     </table>
+    ${pendientes > 0 ? `<div class="nota-pend">⚠️ ${pendientes} persona${pendientes > 1 ? 's' : ''} pendiente${pendientes > 1 ? 's' : ''} de inscripción en el padrón PRM. Inscribir en: <strong>verificate.prm.do</strong></div>` : ''}
     <div class="footer">
       <span>Total: ${equipo.length} colaboradores</span>
       <span>Generado el ${fecha}</span>
@@ -259,27 +268,36 @@ export default function CampoScreen() {
       setColaboradores(prev => ({ ...prev, [l.id]: equipo }));
     }
 
-    const meta = [
+    const zonaLider = [
+      l.provincia || null,
       l.circunscripcion ? `CIR-${l.circunscripcion}` : null,
-      l.municipio,
+      l.municipio || null,
       l.colegio ? `Mesa ${l.colegio}` : null,
+      l.celular ? `📱 ${l.celular}` : null,
     ].filter(Boolean).join(' · ');
 
-    const lineas = equipo.map((c, i) =>
-      `${i + 1}. ${c.nombre}${c.colegio ? ` · Mesa ${c.colegio}` : ''}`
-    ).join('\n');
+    const lineas = equipo.map((c: Colaborador, i: number) => {
+      const bits = [c.nombre];
+      if (c.colegio) bits.push(`Mesa ${c.colegio}`);
+      if (c.celular) bits.push(c.celular);
+      if (c.pendiente_padron) bits.push('⚠️ pend. PRM');
+      return `${i + 1}. ${bits.join(' · ')}`;
+    }).join('\n');
 
     const fecha = new Date().toLocaleDateString('es-DO', { day: 'numeric', month: 'long', year: 'numeric' });
+
+    const pendientesShare = equipo.filter((c: Colaborador) => c.pendiente_padron).length;
 
     const texto = [
       `★ Equipo de ${l.nombre}`,
       `Proyecto Presidencial David Collado`,
       `Equipo de Trabajo · Victor Ogando`,
-      meta || null,
+      zonaLider || null,
       `──────────────────────`,
       lineas || 'Sin colaboradores aún',
       `──────────────────────`,
       `Total: ${equipo.length} colaboradores`,
+      pendientesShare > 0 ? `⚠️ ${pendientesShare} pend. de inscripción PRM` : null,
       `Generado el ${fecha}`,
     ].filter(Boolean).join('\n');
 
@@ -422,8 +440,16 @@ export default function CampoScreen() {
                                 <Text style={styles.esLiderBadgeTxt}>Sub-líder</Text>
                               </View>
                             )}
+                            {c.pendiente_padron && (
+                              <View style={styles.pendienteBadge}>
+                                <Text style={styles.pendienteBadgeTxt}>⚠️ PRM</Text>
+                              </View>
+                            )}
                           </View>
-                          <Text style={styles.colabMeta}>{c.cedula}{c.colegio ? ` · Mesa ${c.colegio}` : ''}</Text>
+                          <Text style={styles.colabMeta}>
+                            {c.cedula}{c.colegio ? ` · Mesa ${c.colegio}` : ''}
+                            {!c.celular ? '  · ⚠️ Sin tel' : ''}
+                          </Text>
                         </View>
                         <View style={styles.colabBtns}>
                           {!esLider && (
@@ -612,6 +638,8 @@ const styles = StyleSheet.create({
   colabMeta: { fontSize: 11, color: '#888', marginTop: 1 },
   esLiderBadge: { backgroundColor: '#f5a623', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
   esLiderBadgeTxt: { fontSize: 9, fontWeight: '800', color: '#fff' },
+  pendienteBadge: { backgroundColor: '#fff3cd', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: '#f5a623' },
+  pendienteBadgeTxt: { fontSize: 9, fontWeight: '700', color: '#7a4f00' },
   colabBtns: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   btnPromover: { padding: 6, backgroundColor: '#fff9e6', borderRadius: 6, borderWidth: 1, borderColor: '#f5a623' },
   btnPromoverTxt: { color: '#f5a623', fontSize: 12, fontWeight: '700' },
