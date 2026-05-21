@@ -7,9 +7,10 @@ export default function TabLayout() {
     <Tabs
       tabBar={props => <CustomTabBar {...props} />}
       screenOptions={{ headerShown: false }}>
-      <Tabs.Screen name="index" options={{ title: 'Búsqueda' }} />
-      <Tabs.Screen name="campo" options={{ title: 'Equipos' }} />
-      <Tabs.Screen name="explore" options={{ title: 'Resumen' }} />
+      <Tabs.Screen name="index"      options={{ title: 'Búsqueda' }} />
+      <Tabs.Screen name="campo"      options={{ title: 'Equipos' }} />
+      <Tabs.Screen name="explore"    options={{ title: 'Resumen' }} />
+      <Tabs.Screen name="elecciones" options={{ title: 'Día D' }} />
     </Tabs>
   );
 }

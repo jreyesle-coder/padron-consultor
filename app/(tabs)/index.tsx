@@ -212,9 +212,25 @@ export default function HomeScreen() {
     setModalLideres(true);
   };
 
+  const checkDuplicado = async (cedula: string): Promise<string | null> => {
+    const norm = normalizarCedula(cedula);
+    const { data } = await (supabase
+      .from('colaboradores_campo')
+      .select('lider_id, lideres_campo!lider_id(nombre)')
+      .eq('cedula', norm)
+      .maybeSingle() as any);
+    if (data?.lideres_campo?.nombre) return data.lideres_campo.nombre;
+    return null;
+  };
+
   const confirmarColaborador = async (p: Persona, lider: Lider) => {
     setModalLideres(false);
-    if (!confirm(`👥 ¿Agregar a ${p.nombre_completo} al equipo de ${lider.nombre}?`)) return;
+    const equipoActual = await checkDuplicado(p.cedula);
+    if (equipoActual) {
+      if (!confirm(`⚠️ ${p.nombre_completo} ya está en el equipo de "${equipoActual}".\n¿Querés agregarlo también al equipo de ${lider.nombre}?`)) return;
+    } else {
+      if (!confirm(`👥 ¿Agregar a ${p.nombre_completo} al equipo de ${lider.nombre}?`)) return;
+    }
     const rec = p.id_recinto ? recintos.get(p.id_recinto) : null;
     const { error } = await supabase.from('colaboradores_campo').insert({
       cedula: normalizarCedula(p.cedula), nombre: p.nombre_completo,

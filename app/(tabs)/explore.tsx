@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
+import { useSesion } from '@/lib/auth-context';
 
 type ResumenLider = {
   id: number;
@@ -11,12 +12,14 @@ type ResumenLider = {
   colegio: string | null;
   celular: string | null;
   parent_lider_id: number | null;
+  meta_votos: number | null;
   colaboradores: { id: number; nombre: string; colegio: string | null; }[];
   subLideresCount: number;
   totalRed: number;
 };
 
 export default function ResumenScreen() {
+  const { sesion, cerrarSesion } = useSesion();
   const [totalMilitantes, setTotalMilitantes] = useState<number | null>(null);
   const [totalElectoral, setTotalElectoral] = useState<number | null>(null);
   const [lideres, setLideres] = useState<ResumenLider[]>([]);
@@ -27,12 +30,17 @@ export default function ResumenScreen() {
 
   const cargar = useCallback(async () => {
     setCargando(true);
+    const esLider = sesion?.rol === 'lider' && sesion?.lider_id;
+
     const [rMil, rElec, rLideres, rColab] = await Promise.all([
       supabase.from('padron').select('id_militante', { count: 'exact', head: true }),
       supabase.from('padron_electoral').select('id', { count: 'exact', head: true }),
-      supabase.from('lideres_campo').select('id, nombre, circunscripcion, municipio, colegio, celular, parent_lider_id').order('circunscripcion').order('nombre'),
+      esLider
+        ? supabase.from('lideres_campo').select('id, nombre, circunscripcion, municipio, colegio, celular, parent_lider_id, meta_votos').eq('id', sesion!.lider_id!)
+        : supabase.from('lideres_campo').select('id, nombre, circunscripcion, municipio, colegio, celular, parent_lider_id, meta_votos').order('circunscripcion').order('nombre'),
       supabase.from('colaboradores_campo').select('id, nombre, colegio, lider_id'),
     ]);
+
     setTotalMilitantes(rMil.count);
     setTotalElectoral(rElec.count);
     setTotalColaboradores(rColab.data?.length || 0);
@@ -40,22 +48,23 @@ export default function ResumenScreen() {
     const todosLideres = rLideres.data || [];
     const todosColab = rColab.data || [];
 
-    // Colaboradores agrupados por lider_id
     const colabPorLider: { [id: number]: any[] } = {};
     for (const c of todosColab) {
       if (!colabPorLider[c.lider_id]) colabPorLider[c.lider_id] = [];
       colabPorLider[c.lider_id].push(c);
     }
 
-    // Función recursiva: todos los IDs de líderes descendientes
     const getDescendants = (lid: number): number[] => {
       const hijos = todosLideres.filter(l => l.parent_lider_id === lid).map(l => l.id);
       return [...hijos, ...hijos.flatMap(h => getDescendants(h))];
     };
 
-    // Solo líderes raíz
-    const raices = todosLideres.filter(l => !l.parent_lider_id);
-    setTotalSubLideres(todosLideres.length - raices.length);
+    // If lider role: show themselves as the only "root", skip the parent_lider_id filter
+    const raices = esLider
+      ? todosLideres
+      : todosLideres.filter(l => !l.parent_lider_id);
+
+    setTotalSubLideres(esLider ? 0 : todosLideres.length - raices.length);
 
     setLideres(raices.map(l => {
       const descendantIds = getDescendants(l.id);
@@ -70,11 +79,15 @@ export default function ResumenScreen() {
     }));
 
     setCargando(false);
-  }, []);
+  }, [sesion]);
 
   useFocusEffect(useCallback(() => { cargar(); }, [cargar]));
 
   const fmt = (n: number | null) => n != null ? n.toLocaleString('es-DO') : '—';
+
+  const totalMetaGlobal = lideres.reduce((s, l) => s + (l.meta_votos || 0), 0);
+  const totalRedGlobal = lideres.reduce((s, l) => s + l.totalRed, 0);
+  const pctGlobal = totalMetaGlobal > 0 ? Math.min(100, Math.round(totalRedGlobal / totalMetaGlobal * 100)) : null;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -85,46 +98,73 @@ export default function ResumenScreen() {
             <Text style={styles.headerProyecto}>Proyecto Presidencial David Collado</Text>
             <Text style={styles.headerEquipo}>Equipo de Trabajo · Victor Ogando</Text>
           </View>
+          <TouchableOpacity onPress={cerrarSesion} style={styles.btnSalir}>
+            <Text style={styles.btnSalirTxt}>Salir</Text>
+          </TouchableOpacity>
         </View>
         <Text style={styles.titulo}>Resumen General</Text>
+        {sesion && (
+          <Text style={styles.usuarioTxt}>
+            {sesion.rol === 'admin' ? '👑 Admin' : '★ Líder'} · {sesion.nombre}
+          </Text>
+        )}
       </View>
 
       {cargando ? <ActivityIndicator color="#0a7ea4" style={{ marginTop: 40 }} /> : (
         <>
-          <View style={styles.metricasRow}>
-            <View style={[styles.metricaCard, styles.metricaAzul]}>
-              <Text style={styles.metricaNum}>{fmt(totalElectoral)}</Text>
-              <Text style={styles.metricaLabel}>Militantes{'\n'}registrados</Text>
+          {/* Padrón stats — only admin sees these */}
+          {sesion?.rol === 'admin' && (
+            <View style={styles.metricasRow}>
+              <View style={[styles.metricaCard, styles.metricaAzul]}>
+                <Text style={styles.metricaNum}>{fmt(totalElectoral)}</Text>
+                <Text style={styles.metricaLabel}>Militantes{'\n'}registrados</Text>
+              </View>
+              <View style={[styles.metricaCard, styles.metricaVerde]}>
+                <Text style={styles.metricaNum}>{fmt(totalMilitantes)}</Text>
+                <Text style={styles.metricaLabel}>Militantes{'\n'}activos</Text>
+              </View>
             </View>
-            <View style={[styles.metricaCard, styles.metricaVerde]}>
-              <Text style={styles.metricaNum}>{fmt(totalMilitantes)}</Text>
-              <Text style={styles.metricaLabel}>Militantes{'\n'}activos</Text>
-            </View>
-          </View>
+          )}
 
           <View style={styles.metricasRow}>
             <View style={[styles.metricaCard, styles.metricaOscuro]}>
               <Text style={styles.metricaNum}>{lideres.length}</Text>
               <Text style={styles.metricaLabel}>Líderes{'\n'}principales</Text>
             </View>
-            <View style={[styles.metricaCard, styles.metricaDorado]}>
-              <Text style={styles.metricaNum}>{totalSubLideres}</Text>
-              <Text style={styles.metricaLabel}>Sub-líderes{'\n'}activos</Text>
-            </View>
-          </View>
-
-          <View style={[styles.metricasRow]}>
+            {sesion?.rol === 'admin' && (
+              <View style={[styles.metricaCard, styles.metricaDorado]}>
+                <Text style={styles.metricaNum}>{totalSubLideres}</Text>
+                <Text style={styles.metricaLabel}>Sub-líderes{'\n'}activos</Text>
+              </View>
+            )}
             <View style={[styles.metricaCard, styles.metricaGris]}>
               <Text style={styles.metricaNum}>{totalColaboradores}</Text>
               <Text style={styles.metricaLabel}>Colaboradores{'\n'}asignados</Text>
             </View>
           </View>
 
+          {/* Meta global progress */}
+          {pctGlobal !== null && (
+            <View style={styles.metaGlobalCard}>
+              <View style={styles.metaGlobalHeader}>
+                <Text style={styles.metaGlobalTitulo}>🎯 Avance hacia meta global</Text>
+                <Text style={styles.metaGlobalPct}>{pctGlobal}%</Text>
+              </View>
+              <View style={styles.progBg}>
+                <View style={[styles.progFill, { width: `${pctGlobal}%` as any }]} />
+              </View>
+              <Text style={styles.metaGlobalSub}>{totalRedGlobal.toLocaleString('es-DO')} de {totalMetaGlobal.toLocaleString('es-DO')} personas movilizadas</Text>
+            </View>
+          )}
+
           {lideres.length > 0 && (
             <>
               <Text style={styles.seccionTitulo}>Líderes principales</Text>
               {lideres.map(l => {
                 const isOpen = abierto === l.id;
+                const meta = l.meta_votos || 0;
+                const pctLider = meta > 0 ? Math.min(100, Math.round(l.totalRed / meta * 100)) : null;
+
                 return (
                   <View key={l.id} style={styles.liderCard}>
                     <TouchableOpacity onPress={() => setAbierto(isOpen ? null : l.id)} style={styles.liderRow}>
@@ -136,9 +176,16 @@ export default function ResumenScreen() {
                         <Text style={styles.liderMeta}>
                           {[l.circunscripcion ? `CIR-${l.circunscripcion}` : null, l.municipio, l.colegio ? `Mesa ${l.colegio}` : null].filter(Boolean).join(' · ')}
                         </Text>
+                        {pctLider !== null && (
+                          <View style={styles.miniMetaRow}>
+                            <View style={styles.miniProgBg}>
+                              <View style={[styles.miniProgFill, { width: `${pctLider}%` as any }]} />
+                            </View>
+                            <Text style={styles.miniMetaTxt}>{l.totalRed}/{meta}</Text>
+                          </View>
+                        )}
                       </View>
                       <View style={styles.liderRight}>
-                        {/* Contadores de red */}
                         <View style={styles.statsBox}>
                           {l.subLideresCount > 0 && (
                             <View style={styles.statChip}>
@@ -161,6 +208,13 @@ export default function ResumenScreen() {
                           <Text style={styles.equipoResumenRed}>
                             🔗 {l.subLideresCount} sub-líder{l.subLideresCount > 1 ? 'es' : ''} · {l.totalRed} personas en toda la red
                           </Text>
+                        )}
+                        {meta > 0 && (
+                          <View style={styles.metaDetalle}>
+                            <Text style={styles.metaDetalleTxt}>
+                              🎯 Meta: {meta} · Alcanzado: {l.totalRed} · {pctLider}%
+                            </Text>
+                          </View>
                         )}
                         <Text style={styles.equipoSeccion}>Equipo directo ({l.colaboradores.length})</Text>
                         {l.colaboradores.length === 0 ? (
@@ -209,6 +263,9 @@ const styles = StyleSheet.create({
   headerProyecto: { fontSize: 12, fontWeight: '700', color: '#0a4f6e' },
   headerEquipo: { fontSize: 11, color: '#0a7ea4', fontWeight: '600', marginTop: 1 },
   titulo: { fontSize: 18, fontWeight: 'bold', color: '#0a4f6e', textAlign: 'center' },
+  usuarioTxt: { fontSize: 11, color: '#888', textAlign: 'center', marginTop: 2 },
+  btnSalir: { backgroundColor: '#f0f0f0', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
+  btnSalirTxt: { fontSize: 11, color: '#555', fontWeight: '700' },
   metricasRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
   metricaCard: { flex: 1, borderRadius: 12, padding: 14, alignItems: 'center' },
   metricaAzul: { backgroundColor: '#0a7ea4' },
@@ -218,6 +275,13 @@ const styles = StyleSheet.create({
   metricaGris: { backgroundColor: '#555' },
   metricaNum: { fontSize: 26, fontWeight: '800', color: '#fff' },
   metricaLabel: { fontSize: 11, color: 'rgba(255,255,255,0.85)', textAlign: 'center', marginTop: 4, lineHeight: 15 },
+  metaGlobalCard: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 10, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.07, shadowRadius: 3 },
+  metaGlobalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  metaGlobalTitulo: { fontSize: 13, fontWeight: '700', color: '#0a4f6e' },
+  metaGlobalPct: { fontSize: 18, fontWeight: '800', color: '#1a6e35' },
+  progBg: { height: 10, backgroundColor: '#e0e0e0', borderRadius: 5, overflow: 'hidden', marginBottom: 6 },
+  progFill: { height: '100%', backgroundColor: '#1a6e35', borderRadius: 5 },
+  metaGlobalSub: { fontSize: 11, color: '#888', textAlign: 'center' },
   seccionTitulo: { fontSize: 14, fontWeight: '700', color: '#333', marginBottom: 8 },
   liderCard: { backgroundColor: '#fff', borderRadius: 12, marginBottom: 7, overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.07, shadowRadius: 3 },
   liderRow: { flexDirection: 'row', alignItems: 'center', padding: 12 },
@@ -226,6 +290,10 @@ const styles = StyleSheet.create({
   liderInfo: { flex: 1 },
   liderNombre: { fontSize: 13, fontWeight: '700', color: '#111' },
   liderMeta: { fontSize: 11, color: '#888', marginTop: 1 },
+  miniMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5 },
+  miniProgBg: { flex: 1, height: 5, backgroundColor: '#e0e0e0', borderRadius: 3, overflow: 'hidden' },
+  miniProgFill: { height: '100%', backgroundColor: '#1a6e35', borderRadius: 3 },
+  miniMetaTxt: { fontSize: 10, color: '#1a6e35', fontWeight: '700', minWidth: 36, textAlign: 'right' },
   liderRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   statsBox: { flexDirection: 'row', gap: 5 },
   statChip: { alignItems: 'center', backgroundColor: '#f0f0f0', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, minWidth: 36 },
@@ -237,6 +305,8 @@ const styles = StyleSheet.create({
   chevron: { color: '#aaa', fontSize: 11 },
   equipoList: { borderTopWidth: 1, borderTopColor: '#f5f5f5', paddingHorizontal: 12, paddingBottom: 10, paddingTop: 8 },
   equipoResumenRed: { fontSize: 12, color: '#0a7ea4', fontWeight: '600', marginBottom: 8 },
+  metaDetalle: { backgroundColor: '#f0faf2', borderRadius: 7, padding: 8, marginBottom: 8 },
+  metaDetalleTxt: { fontSize: 12, color: '#1a6e35', fontWeight: '600' },
   equipoSeccion: { fontSize: 10, fontWeight: '800', color: '#aaa', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
   equipoVacio: { fontSize: 12, color: '#bbb', textAlign: 'center', paddingVertical: 8 },
   colabRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5 },
