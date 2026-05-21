@@ -14,6 +14,7 @@ import {
 const confirm = (msg: string) => window.confirm(msg);
 const notify = (msg: string) => window.alert(msg);
 import { supabase } from '../../lib/supabase';
+import { useSesion, puedeEditar } from '@/lib/auth-context';
 
 export type Persona = {
   id: number;
@@ -48,6 +49,8 @@ const esCedula = (t: string) => /^[\d\-]+$/.test(t.trim());
 export let recintosCache: Map<number, RecintoInfo> = new Map();
 
 export default function HomeScreen() {
+  const { sesion } = useSesion();
+  const editar = puedeEditar(sesion?.rol);
   const [busqueda, setBusqueda] = useState('');
   const [provinciaFiltro, setProvinciaFiltro] = useState('');
   const [municipioFiltro, setMunicipioFiltro] = useState('');
@@ -350,9 +353,11 @@ export default function HomeScreen() {
                   Esta persona puede no estar inscrita en el PRM. Podés agregarla a tu equipo igualmente y luego registrarla en el partido.
                 </Text>
                 <View style={styles.noEncontradoBtns}>
-                  <TouchableOpacity style={styles.btnRegistrar} onPress={abrirRegistroManual}>
-                    <Text style={styles.btnRegistrarTxt}>📝 Agregar al equipo</Text>
-                  </TouchableOpacity>
+                  {editar && (
+                    <TouchableOpacity style={styles.btnRegistrar} onPress={abrirRegistroManual}>
+                      <Text style={styles.btnRegistrarTxt}>📝 Agregar al equipo</Text>
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity
                     style={styles.btnPRM}
                     onPress={() => window.open('https://verificate.prm.do/', '_blank')}>
@@ -407,14 +412,16 @@ export default function HomeScreen() {
                       {p.direccion ? (
                         <View style={styles.direccionRow}><Text style={styles.detalleLabel}>Dirección</Text><Text style={styles.detalleVal}>{p.direccion}</Text></View>
                       ) : null}
-                      <View style={styles.accionesRow}>
-                        <TouchableOpacity style={styles.btnLider} onPress={() => confirmarLider(p)}>
-                          <Text style={styles.btnAccionTxt}>★ Líder</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.btnColaborador} onPress={() => iniciarAsignarColaborador(p)}>
-                          <Text style={styles.btnAccionTxt}>👥 Colaborador</Text>
-                        </TouchableOpacity>
-                      </View>
+                      {editar && (
+                        <View style={styles.accionesRow}>
+                          <TouchableOpacity style={styles.btnLider} onPress={() => confirmarLider(p)}>
+                            <Text style={styles.btnAccionTxt}>★ Líder</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.btnColaborador} onPress={() => iniciarAsignarColaborador(p)}>
+                            <Text style={styles.btnAccionTxt}>👥 Colaborador</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
                     </View>
                   )}
                   {!isOpen && <Text style={styles.expandHint}>▾</Text>}

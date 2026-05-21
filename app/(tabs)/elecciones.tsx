@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { useSesion } from '@/lib/auth-context';
+import { useSesion, puedeEditar } from '@/lib/auth-context';
 
 type Colab = {
   id: number;
@@ -34,6 +34,7 @@ type LiderConEquipo = {
 
 export default function EleccionesScreen() {
   const { sesion, cerrarSesion } = useSesion();
+  const editar = puedeEditar(sesion?.rol);
   const [lideres, setLideres] = useState<LiderConEquipo[]>([]);
   const [cargando, setCargando] = useState(true);
   const [abierto, setAbierto] = useState<number | null>(null);
@@ -182,18 +183,28 @@ export default function EleccionesScreen() {
                             </Text>
                           </View>
                           <View style={styles.colabBtns}>
-                            <TouchableOpacity
-                              style={[styles.btnVoto, c.voto_confirmado && styles.btnVotoActivo]}
-                              onPress={() => toggleVoto(c)}>
-                              <Text style={[styles.btnVotoTxt, c.voto_confirmado && styles.btnVotoTxtActivo]}>
-                                {c.voto_confirmado ? '✓ Votó' : 'Votó?'}
-                              </Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={[styles.btnTransporte, c.necesita_transporte && styles.btnTransporteActivo]}
-                              onPress={() => toggleTransporte(c)}>
-                              <Text style={styles.btnTransporteTxt}>🚗</Text>
-                            </TouchableOpacity>
+                            {editar ? (
+                              <>
+                                <TouchableOpacity
+                                  style={[styles.btnVoto, c.voto_confirmado && styles.btnVotoActivo]}
+                                  onPress={() => toggleVoto(c)}>
+                                  <Text style={[styles.btnVotoTxt, c.voto_confirmado && styles.btnVotoTxtActivo]}>
+                                    {c.voto_confirmado ? '✓ Votó' : 'Votó?'}
+                                  </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={[styles.btnTransporte, c.necesita_transporte && styles.btnTransporteActivo]}
+                                  onPress={() => toggleTransporte(c)}>
+                                  <Text style={styles.btnTransporteTxt}>🚗</Text>
+                                </TouchableOpacity>
+                              </>
+                            ) : (
+                              <View style={[styles.btnVoto, c.voto_confirmado && styles.btnVotoActivo]}>
+                                <Text style={[styles.btnVotoTxt, c.voto_confirmado && styles.btnVotoTxtActivo]}>
+                                  {c.voto_confirmado ? '✓ Votó' : 'Pendiente'}
+                                </Text>
+                              </View>
+                            )}
                           </View>
                         </View>
                       ))

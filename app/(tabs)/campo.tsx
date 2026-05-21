@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { useSesion } from '@/lib/auth-context';
+import { useSesion, puedeEditar } from '@/lib/auth-context';
 
 const confirm = (msg: string) => window.confirm(msg);
 const notify = (msg: string) => window.alert(msg);
@@ -61,6 +61,7 @@ type RedItem = {
 
 export default function CampoScreen() {
   const { sesion, cerrarSesion } = useSesion();
+  const editar = puedeEditar(sesion?.rol);
   const [lideres, setLideres] = useState<Lider[]>([]);
   const [liderByCedula, setLiderByCedula] = useState<Map<string, Lider>>(new Map());
   const [colaboradores, setColaboradores] = useState<{ [id: number]: Colaborador[] }>({});
@@ -530,9 +531,11 @@ export default function CampoScreen() {
 
                 <View style={styles.seccionHeaderRow}>
                   <Text style={styles.seccionLabel}>Colaboradores directos ({equipo.length})</Text>
-                  <TouchableOpacity onPress={() => editarMeta(l)} style={styles.btnEditMeta}>
-                    <Text style={styles.btnEditMetaTxt}>✏️ Meta{meta > 0 ? `: ${meta}` : ''}</Text>
-                  </TouchableOpacity>
+                  {editar && (
+                    <TouchableOpacity onPress={() => editarMeta(l)} style={styles.btnEditMeta}>
+                      <Text style={styles.btnEditMetaTxt}>✏️ Meta{meta > 0 ? `: ${meta}` : ''}</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
 
                 {equipo.length === 0 ? (
@@ -569,14 +572,16 @@ export default function CampoScreen() {
                           <TouchableOpacity onPress={() => abrirDetColab(c, l.id)} style={styles.btnDetalle}>
                             <Text style={styles.btnDetalleTxt}>📋</Text>
                           </TouchableOpacity>
-                          {!esLider && (
+                          {editar && !esLider && (
                             <TouchableOpacity onPress={() => promoverALider(c, l)} style={styles.btnPromover}>
                               <Text style={styles.btnPromoverTxt}>★</Text>
                             </TouchableOpacity>
                           )}
-                          <TouchableOpacity onPress={() => eliminarColaborador(l.id, c)} style={styles.btnX}>
-                            <Text style={styles.btnXTxt}>✕</Text>
-                          </TouchableOpacity>
+                          {editar && (
+                            <TouchableOpacity onPress={() => eliminarColaborador(l.id, c)} style={styles.btnX}>
+                              <Text style={styles.btnXTxt}>✕</Text>
+                            </TouchableOpacity>
+                          )}
                         </View>
                       </View>
                     );
@@ -595,9 +600,11 @@ export default function CampoScreen() {
                       <Text style={styles.btnCompartirTxt}>📤 Compartir</Text>
                     </TouchableOpacity>
                   </View>
-                  <TouchableOpacity style={styles.btnEliminarLider} onPress={() => eliminarLider(l)}>
-                    <Text style={styles.btnEliminarLiderTxt}>Quitar como líder</Text>
-                  </TouchableOpacity>
+                  {editar && (
+                    <TouchableOpacity style={styles.btnEliminarLider} onPress={() => eliminarLider(l)}>
+                      <Text style={styles.btnEliminarLiderTxt}>Quitar como líder</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
             )}

@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
-import { useSesion } from '@/lib/auth-context';
+import { useSesion, esSuperAdmin } from '@/lib/auth-context';
 
 type ResumenLider = {
   id: number;
@@ -20,6 +20,7 @@ type ResumenLider = {
 
 export default function ResumenScreen() {
   const { sesion, cerrarSesion } = useSesion();
+  const router = useRouter();
   const [totalMilitantes, setTotalMilitantes] = useState<number | null>(null);
   const [totalElectoral, setTotalElectoral] = useState<number | null>(null);
   const [lideres, setLideres] = useState<ResumenLider[]>([]);
@@ -98,6 +99,11 @@ export default function ResumenScreen() {
             <Text style={styles.headerProyecto}>Proyecto Presidencial David Collado</Text>
             <Text style={styles.headerEquipo}>Equipo de Trabajo · Victor Ogando</Text>
           </View>
+          {esSuperAdmin(sesion?.rol) && (
+            <TouchableOpacity onPress={() => router.push('/usuarios')} style={styles.btnUsuarios}>
+              <Text style={styles.btnUsuariosTxt}>⚙ Usuarios</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity onPress={cerrarSesion} style={styles.btnSalir}>
             <Text style={styles.btnSalirTxt}>Salir</Text>
           </TouchableOpacity>
@@ -264,6 +270,8 @@ const styles = StyleSheet.create({
   headerEquipo: { fontSize: 11, color: '#0a7ea4', fontWeight: '600', marginTop: 1 },
   titulo: { fontSize: 18, fontWeight: 'bold', color: '#0a4f6e', textAlign: 'center' },
   usuarioTxt: { fontSize: 11, color: '#888', textAlign: 'center', marginTop: 2 },
+  btnUsuarios: { backgroundColor: '#0a4f6e', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, marginRight: 5 },
+  btnUsuariosTxt: { fontSize: 11, color: '#fff', fontWeight: '700' },
   btnSalir: { backgroundColor: '#f0f0f0', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
   btnSalirTxt: { fontSize: 11, color: '#555', fontWeight: '700' },
   metricasRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },

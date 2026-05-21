@@ -1,7 +1,12 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { supabase } from './supabase';
 
-export type UserRol = 'admin' | 'lider';
+export type UserRol = 'superadmin' | 'admin' | 'visor' | 'operativo' | 'lider';
+
+/** Puede crear/editar/eliminar datos (no visor) */
+export const puedeEditar = (rol?: UserRol | null) => rol !== 'visor';
+/** Puede gestionar usuarios (superadmin o admin legacy) */
+export const esSuperAdmin = (rol?: UserRol | null) => rol === 'superadmin' || rol === 'admin';
 
 export type SesionApp = {
   email: string;
