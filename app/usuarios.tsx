@@ -13,12 +13,13 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { useSesion, esSuperAdmin } from '@/lib/auth-context';
+import { dialogConfirm } from '@/lib/dialog';
 
 // Cliente temporal para crear usuarios sin afectar la sesión activa del admin
 const crearAuthUsuario = async (email: string, password: string) => {
   const tmp = createClient(
-    'https://mwddvwulxbxqtcdcyewh.supabase.co',
-    'sb_publishable_P-_7j53-tV1gkZYJixh-0A_GnhA6zU5',
+    process.env.EXPO_PUBLIC_SUPABASE_URL!,
+    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
     { auth: { storageKey: `_tmp_${Date.now()}`, autoRefreshToken: false, persistSession: false } }
   );
   return tmp.auth.signUp({ email, password });
@@ -130,7 +131,7 @@ export default function UsuariosScreen() {
   };
 
   const eliminarAcceso = async (u: Usuario) => {
-    if (!window.confirm(`¿Quitar acceso a ${u.nombre || u.email}?\n\nEsto solo elimina su acceso a la app.`)) return;
+    if (!await dialogConfirm(`¿Quitar acceso a ${u.nombre || u.email}?\n\nEsto solo elimina su acceso a la app.`)) return;
     await supabase.from('usuarios_app').delete().eq('id', u.id);
     cargar();
   };
@@ -148,7 +149,7 @@ export default function UsuariosScreen() {
             <Text style={styles.backBtnTxt}>← Volver</Text>
           </TouchableOpacity>
           <Image source={require('../assets/images/logo-prm.png')} style={styles.logo} resizeMode="contain" />
-          <Text style={styles.headerProyecto}>Proyecto Presidencial David Collado</Text>
+          <Text style={styles.headerProyecto}>Trabajo de Campo PRM</Text>
         </View>
         <Text style={styles.titulo}>Gestión de Usuarios</Text>
         <Text style={styles.subtitulo}>Solo visible para Super Admin</Text>

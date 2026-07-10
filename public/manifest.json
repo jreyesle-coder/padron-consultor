@@ -1,0 +1,31 @@
+{
+  "name": "Trabajo de Campo PRM",
+  "short_name": "Campo PRM",
+  "description": "Gestión de líderes y colaboradores de campo — Partido Revolucionario Moderno",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f0f2f5",
+  "theme_color": "#0a4f6e",
+  "orientation": "portrait-primary",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

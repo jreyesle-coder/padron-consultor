@@ -11,10 +11,24 @@ import {
   View,
 } from 'react-native';
 
-const confirm = (msg: string) => window.confirm(msg);
-const notify = (msg: string) => window.alert(msg);
+import { Linking } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { useSesion, puedeEditar } from '@/lib/auth-context';
+import { dialogAlert, dialogConfirm, dialogPrompt } from '@/lib/dialog';
+import { cachedQuery, cacheInvalidate, searchCacheGet, searchCacheSet, searchCacheInvalidate } from '@/lib/offline-cache';
+import { enqueue, buildNamespace } from '@/lib/sync-queue';
+import { SyncStatusBar } from '@/components/sync-status-bar';
+
+const H1 = 24 * 60 * 60 * 1000;
+const H1_PADRON = 60 * 60 * 1000;
+
+function isNetworkError(err: any): boolean {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return true;
+  const msg = String(err?.message ?? '');
+  return msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('fetch');
+}
+
+const APP_NAME = 'Trabajo de Campo PRM';
 
 export type Persona = {
   id: number;
@@ -51,6 +65,9 @@ export let recintosCache: Map<number, RecintoInfo> = new Map();
 export default function HomeScreen() {
   const { sesion } = useSesion();
   const editar = puedeEditar(sesion?.rol);
+  const orgNombre = sesion?.organizacion_nombre ?? APP_NAME;
+  const ns = sesion ? buildNamespace(sesion.userId, sesion.organizacion_id) : null;
+  const nsPrefix = ns ? `${ns}_` : '';
   const [busqueda, setBusqueda] = useState('');
   const [provinciaFiltro, setProvinciaFiltro] = useState('');
   const [municipioFiltro, setMunicipioFiltro] = useState('');
@@ -76,16 +93,22 @@ export default function HomeScreen() {
   const [regLideres, setRegLideres] = useState<Lider[]>([]);
 
   useEffect(() => {
-    supabase.from('recintos')
-      .select('id_recinto, codigo_recinto, provincia, municipio, distrito, num_colegios, circunscripcion')
-      .then(({ data }) => {
-        if (data) {
-          const map = new Map<number, RecintoInfo>();
-          data.forEach(r => map.set(r.id_recinto, r));
-          setRecintos(map);
-          recintosCache = map;
-        }
-      });
+    cachedQuery(
+      `${nsPrefix}recintos:all`,
+      async () => {
+        const { data } = await supabase.from('recintos')
+          .select('id_recinto, codigo_recinto, provincia, municipio, distrito, num_colegios, circunscripcion');
+        return data;
+      },
+      H1
+    ).then(data => {
+      if (data) {
+        const map = new Map<number, RecintoInfo>();
+        (data as any[]).forEach(r => map.set(r.id_recinto, r));
+        setRecintos(map);
+        recintosCache = map;
+      }
+    });
   }, []);
 
   const normalizarCedula = (c: string) => c.replace(/\D/g, '').padStart(11, '0');
@@ -121,6 +144,17 @@ export default function HomeScreen() {
     const texto = busqueda.trim();
     if (!texto) { setResultados([]); return; }
     const modo: 'cedula' | 'nombre' = esCedula(texto) ? 'cedula' : 'nombre';
+
+    // LRU cache check — serve cached result instantly for new searches
+    if (nuevaBusqueda && ns) {
+      const qHash = JSON.stringify({ t: texto, m: modo, p: provinciaFiltro, mu: municipioFiltro });
+      const hit = await searchCacheGet<Persona[]>(ns, qHash);
+      if (hit) {
+        setResultados(hit); setPagina(0); setModoBusqueda(modo); setExpandido(null);
+        return;
+      }
+    }
+
     setCargando(true);
     const paginaActual = nuevaBusqueda ? 0 : pagina + 1;
     const desde = paginaActual * PAGE_SIZE;
@@ -143,6 +177,7 @@ export default function HomeScreen() {
       const soloElectoral = (resElectoral.data || []).filter(e => !cedulasPadron.has(normalizarCedula(e.cedula))).map(electoralAPersona);
       let todos = [...padronData, ...soloElectoral];
       todos = await enriquecerConPadronElectoral(todos);
+      if (nuevaBusqueda && ns) await searchCacheSet(ns, JSON.stringify({ t: texto, m: modo, p: provinciaFiltro, mu: municipioFiltro }), todos);
       if (nuevaBusqueda) { setResultados(todos); setPagina(0); setModoBusqueda(modo); setExpandido(null); }
       else { setResultados(prev => [...prev, ...todos]); setPagina(paginaActual); }
       return;
@@ -175,6 +210,7 @@ export default function HomeScreen() {
     const soloElectoral = electoralFiltrado.filter(e => !cedulasPadron.has(normalizarCedula(e.cedula))).map(electoralAPersona);
     let todos = [...padronData, ...soloElectoral];
     todos = await enriquecerConPadronElectoral(todos);
+    if (nuevaBusqueda && ns) await searchCacheSet(ns, JSON.stringify({ t: texto, m: modo, p: provinciaFiltro, mu: municipioFiltro }), todos);
     if (nuevaBusqueda) { setResultados(todos); setPagina(0); setModoBusqueda(modo); setExpandido(null); }
     else { setResultados(prev => [...prev, ...todos]); setPagina(paginaActual); }
   };
@@ -182,26 +218,40 @@ export default function HomeScreen() {
   const confirmarLider = async (p: Persona) => {
     let celularFinal = p.celular;
     if (!celularFinal) {
-      const tel = window.prompt(`⚠️ ${p.nombre_completo} no tiene teléfono registrado.\nIngresá su número (recomendado para el equipo):`);
+      const tel = await dialogPrompt(`⚠️ ${p.nombre_completo} no tiene teléfono registrado.\nIngresá su número (recomendado para el equipo):`);
       if (tel && tel.trim()) celularFinal = tel.trim();
     }
-    if (!confirm(`★ ¿Asignar a ${p.nombre_completo} como líder de campo?`)) return;
+    if (!await dialogConfirm(`★ ¿Asignar a ${p.nombre_completo} como líder de campo?`)) return;
     const rec = p.id_recinto ? recintos.get(p.id_recinto) : null;
-    const { error } = await supabase.from('lideres_campo').insert({
+    const payload = {
       cedula: normalizarCedula(p.cedula), nombre: p.nombre_completo,
       celular: celularFinal || null, provincia: p.provincia || rec?.provincia || null,
       municipio: p.municipio || rec?.municipio || null,
       circunscripcion: rec?.circunscripcion || null,
       id_recinto: p.id_recinto || null, colegio: p.colegio || null,
-    });
-    if (error) notify(error.code === '23505' ? `${p.nombre_completo} ya está registrado como líder.` : `Error: ${error.message}`);
-    else notify(`✓ ${p.nombre_completo} asignado como líder de campo.`);
+    };
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      await enqueue(ns ?? '', { table: 'lideres_campo', operation: 'insert', payload, label: `★ Líder: ${p.nombre_completo}` });
+      await dialogAlert(`✓ ${p.nombre_completo} guardado como líder.\nSe sincronizará cuando haya conexión.`);
+      return;
+    }
+    const { error } = await supabase.from('lideres_campo').insert(payload);
+    if (error) {
+      if (isNetworkError(error)) {
+        await enqueue(ns ?? '', { table: 'lideres_campo', operation: 'insert', payload, label: `★ Líder: ${p.nombre_completo}` });
+        await dialogAlert(`✓ ${p.nombre_completo} guardado localmente.\nSe sincronizará cuando haya conexión.`);
+      } else {
+        await dialogAlert(error.code === '23505' ? `${p.nombre_completo} ya está registrado como líder.` : `Error: ${error.message}`);
+      }
+    } else {
+      await dialogAlert(`✓ ${p.nombre_completo} asignado como líder de campo.`);
+    }
   };
 
   const iniciarAsignarColaborador = async (p: Persona) => {
     let celularFinal = p.celular;
     if (!celularFinal) {
-      const tel = window.prompt(`⚠️ ${p.nombre_completo} no tiene teléfono registrado.\nIngresá su número (recomendado para el equipo):`);
+      const tel = await dialogPrompt(`⚠️ ${p.nombre_completo} no tiene teléfono registrado.\nIngresá su número (recomendado para el equipo):`);
       if (tel && tel.trim()) celularFinal = tel.trim();
     }
     const personaConTel = celularFinal !== p.celular ? { ...p, celular: celularFinal } : p;
@@ -230,21 +280,35 @@ export default function HomeScreen() {
     setModalLideres(false);
     const equipoActual = await checkDuplicado(p.cedula);
     if (equipoActual) {
-      if (!confirm(`⚠️ ${p.nombre_completo} ya está en el equipo de "${equipoActual}".\n¿Querés agregarlo también al equipo de ${lider.nombre}?`)) return;
+      if (!await dialogConfirm(`⚠️ ${p.nombre_completo} ya está en el equipo de "${equipoActual}".\n¿Querés agregarlo también al equipo de ${lider.nombre}?`)) return;
     } else {
-      if (!confirm(`👥 ¿Agregar a ${p.nombre_completo} al equipo de ${lider.nombre}?`)) return;
+      if (!await dialogConfirm(`👥 ¿Agregar a ${p.nombre_completo} al equipo de ${lider.nombre}?`)) return;
     }
     const rec = p.id_recinto ? recintos.get(p.id_recinto) : null;
-    const { error } = await supabase.from('colaboradores_campo').insert({
+    const payload = {
       cedula: normalizarCedula(p.cedula), nombre: p.nombre_completo,
       celular: p.celular || null, provincia: p.provincia || rec?.provincia || null,
       municipio: p.municipio || rec?.municipio || null,
       circunscripcion: rec?.circunscripcion || null,
       id_recinto: p.id_recinto || null, colegio: p.colegio || null,
       lider_id: lider.id,
-    });
-    if (error) notify(error.code === '23505' ? `${p.nombre_completo} ya está registrado como colaborador.` : `Error: ${error.message}`);
-    else notify(`✓ ${p.nombre_completo} agregado al equipo de ${lider.nombre}.`);
+    };
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      await enqueue(ns ?? '', { table: 'colaboradores_campo', operation: 'insert', payload, label: `👥 Colaborador: ${p.nombre_completo} → ${lider.nombre}` });
+      await dialogAlert(`✓ ${p.nombre_completo} guardado localmente.\nSe sincronizará cuando haya conexión.`);
+      return;
+    }
+    const { error } = await supabase.from('colaboradores_campo').insert(payload);
+    if (error) {
+      if (isNetworkError(error)) {
+        await enqueue(ns ?? '', { table: 'colaboradores_campo', operation: 'insert', payload, label: `👥 Colaborador: ${p.nombre_completo} → ${lider.nombre}` });
+        await dialogAlert(`✓ ${p.nombre_completo} guardado localmente.\nSe sincronizará cuando haya conexión.`);
+      } else {
+        await dialogAlert(error.code === '23505' ? `${p.nombre_completo} ya está registrado como colaborador.` : `Error: ${error.message}`);
+      }
+    } else {
+      await dialogAlert(`✓ ${p.nombre_completo} agregado al equipo de ${lider.nombre}.`);
+    }
   };
 
   const abrirRegistroManual = async () => {
@@ -262,10 +326,10 @@ export default function HomeScreen() {
   };
 
   const guardarRegistroManual = async (lider: Lider) => {
-    if (!regNombre.trim()) { notify('El nombre completo es obligatorio.'); return; }
-    if (!regCelular.trim()) { notify('El teléfono es obligatorio para el equipo.'); return; }
+    if (!regNombre.trim()) { await dialogAlert('El nombre completo es obligatorio.'); return; }
+    if (!regCelular.trim()) { await dialogAlert('El teléfono es obligatorio para el equipo.'); return; }
     const cedula = normalizarCedula(busqueda);
-    const { error } = await supabase.from('colaboradores_campo').insert({
+    const payload = {
       cedula,
       nombre: regNombre.trim().toUpperCase(),
       celular: regCelular.trim(),
@@ -273,20 +337,43 @@ export default function HomeScreen() {
       circunscripcion: regCirc.trim() ? parseInt(regCirc) : null,
       lider_id: lider.id,
       pendiente_padron: true,
-    });
+    };
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      await enqueue(ns ?? '', { table: 'colaboradores_campo', operation: 'insert', payload, label: `📝 Manual: ${payload.nombre} → ${lider.nombre}` });
+      setModalRegistroManual(false);
+      await dialogAlert(`✓ ${payload.nombre} guardado localmente.\nSe sincronizará cuando haya conexión.\n\n⚠️ Recordá inscribirlo en el padrón PRM:\nverificate.prm.do`);
+      return;
+    }
+    const { error } = await supabase.from('colaboradores_campo').insert(payload);
     if (error) {
-      notify(error.code === '23505' ? 'Esta cédula ya está registrada en el sistema.' : `Error: ${error.message}`);
+      if (isNetworkError(error)) {
+        await enqueue(ns ?? '', { table: 'colaboradores_campo', operation: 'insert', payload, label: `📝 Manual: ${payload.nombre} → ${lider.nombre}` });
+        setModalRegistroManual(false);
+        await dialogAlert(`✓ ${payload.nombre} guardado localmente.\nSe sincronizará cuando haya conexión.\n\n⚠️ Recordá inscribirlo en el padrón PRM:\nverificate.prm.do`);
+      } else {
+        await dialogAlert(error.code === '23505' ? 'Esta cédula ya está registrada en el sistema.' : `Error: ${error.message}`);
+      }
       return;
     }
     setModalRegistroManual(false);
-    notify(`✓ ${regNombre.trim()} agregado al equipo de ${lider.nombre}.\n\n⚠️ Recordá inscribirlo en el padrón PRM:\nverificate.prm.do`);
+    await dialogAlert(`✓ ${regNombre.trim()} agregado al equipo de ${lider.nombre}.\n\n⚠️ Recordá inscribirlo en el padrón PRM:\nverificate.prm.do`);
   };
 
   const limpiar = () => { setBusqueda(''); setProvinciaFiltro(''); setMunicipioFiltro(''); setResultados([]); setModoBusqueda(null); setExpandido(null); };
+
+  const handleRefresh = async () => {
+    if (ns) {
+      await searchCacheInvalidate(ns);
+      await cacheInvalidate(`${nsPrefix}recintos:all`);
+    }
+    if (busqueda.trim()) ejecutarBusqueda(true);
+  };
   const hayFiltros = !!(provinciaFiltro || municipioFiltro);
   const modoActual = busqueda.trim() ? (esCedula(busqueda) ? 'cedula' : 'nombre') : null;
 
   return (
+    <View style={{ flex: 1 }}>
+      <SyncStatusBar />
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.header}>
         <Image
@@ -294,13 +381,8 @@ export default function HomeScreen() {
           style={styles.logoPRM}
           resizeMode="contain"
         />
-        <Text style={styles.proyectoTitulo}>Proyecto Presidencial</Text>
-        <Text style={styles.proyectoNombre}>David Collado</Text>
-        <View style={styles.equipoRow}>
-          <View style={styles.divider} />
-          <Text style={styles.equipoTxt}>Equipo de Trabajo · Victor Ogando</Text>
-          <View style={styles.divider} />
-        </View>
+        <Text style={styles.proyectoTitulo}>{APP_NAME}</Text>
+        <Text style={styles.proyectoNombre}>{orgNombre}</Text>
       </View>
 
       <View style={styles.searchCard}>
@@ -331,7 +413,10 @@ export default function HomeScreen() {
 
       <View style={styles.resultsHeader}>
         <Text style={styles.resultsCount}>{resultados.length > 0 ? `${resultados.length} resultados` : ''}</Text>
-        {resultados.length > 0 && <TouchableOpacity onPress={limpiar}><Text style={styles.limpiarTxt}>Limpiar</Text></TouchableOpacity>}
+        <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+          <TouchableOpacity onPress={handleRefresh}><Text style={styles.limpiarTxt}>↻ Refrescar</Text></TouchableOpacity>
+          {resultados.length > 0 && <TouchableOpacity onPress={limpiar}><Text style={styles.limpiarTxt}>Limpiar</Text></TouchableOpacity>}
+        </View>
       </View>
 
       {resultados.length === 0 && !cargando ? (
@@ -360,7 +445,7 @@ export default function HomeScreen() {
                   )}
                   <TouchableOpacity
                     style={styles.btnPRM}
-                    onPress={() => window.open('https://verificate.prm.do/', '_blank')}>
+                    onPress={() => Linking.openURL('https://verificate.prm.do/')}>
                     <Text style={styles.btnPRMTxt}>🔗 Inscribir en PRM</Text>
                   </TouchableOpacity>
                 </View>
@@ -568,7 +653,7 @@ export default function HomeScreen() {
 
             <TouchableOpacity
               style={styles.btnPRMGrande}
-              onPress={() => window.open('https://verificate.prm.do/', '_blank')}>
+              onPress={() => Linking.openURL('https://verificate.prm.do/')}>
               <Text style={styles.btnPRMGrandeTxt}>🔗 Inscribir en el padrón PRM → verificate.prm.do</Text>
             </TouchableOpacity>
 
@@ -579,6 +664,7 @@ export default function HomeScreen() {
         </View>
       </Modal>
     </ScrollView>
+    </View>
   );
 }
 

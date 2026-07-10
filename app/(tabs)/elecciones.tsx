@@ -12,6 +12,8 @@ import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useSesion, puedeEditar } from '@/lib/auth-context';
 
+const APP_NAME = 'Trabajo de Campo PRM';
+
 type Colab = {
   id: number;
   nombre: string;
@@ -34,6 +36,7 @@ type LiderConEquipo = {
 
 export default function EleccionesScreen() {
   const { sesion, cerrarSesion } = useSesion();
+  const orgNombre = sesion?.organizacion_nombre ?? APP_NAME;
   const editar = puedeEditar(sesion?.rol);
   const [lideres, setLideres] = useState<LiderConEquipo[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -89,8 +92,8 @@ export default function EleccionesScreen() {
         <View style={styles.headerBand}>
           <Image source={require('../../assets/images/logo-prm.png')} style={styles.logoPRM} resizeMode="contain" />
           <View style={styles.headerTextos}>
-            <Text style={styles.headerProyecto}>Proyecto Presidencial David Collado</Text>
-            <Text style={styles.headerEquipo}>Equipo de Trabajo · Victor Ogando</Text>
+            <Text style={styles.headerProyecto}>{APP_NAME}</Text>
+            <Text style={styles.headerEquipo}>{orgNombre}</Text>
           </View>
           <TouchableOpacity onPress={cerrarSesion} style={styles.btnSalir}>
             <Text style={styles.btnSalirTxt}>Salir</Text>

@@ -4,6 +4,7 @@ import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
 const TABS = [
   { name: 'index',      label: 'Búsqueda' },
   { name: 'campo',      label: 'Equipos' },
+  { name: 'recintos',   label: 'Recintos' },
   { name: 'explore',    label: 'Resumen' },
   { name: 'elecciones', label: 'Día D' },
 ];

@@ -4,6 +4,8 @@ import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacit
 import { supabase } from '../../lib/supabase';
 import { useSesion, esSuperAdmin } from '@/lib/auth-context';
 
+const APP_NAME = 'Trabajo de Campo PRM';
+
 type ResumenLider = {
   id: number;
   nombre: string;
@@ -21,6 +23,7 @@ type ResumenLider = {
 export default function ResumenScreen() {
   const { sesion, cerrarSesion } = useSesion();
   const router = useRouter();
+  const orgNombre = sesion?.organizacion_nombre ?? APP_NAME;
   const [totalMilitantes, setTotalMilitantes] = useState<number | null>(null);
   const [totalElectoral, setTotalElectoral] = useState<number | null>(null);
   const [lideres, setLideres] = useState<ResumenLider[]>([]);
@@ -96,8 +99,8 @@ export default function ResumenScreen() {
         <View style={styles.headerBand}>
           <Image source={require('../../assets/images/logo-prm.png')} style={styles.logoPRM} resizeMode="contain" />
           <View style={styles.headerTextos}>
-            <Text style={styles.headerProyecto}>Proyecto Presidencial David Collado</Text>
-            <Text style={styles.headerEquipo}>Equipo de Trabajo · Victor Ogando</Text>
+            <Text style={styles.headerProyecto}>{APP_NAME}</Text>
+            <Text style={styles.headerEquipo}>{orgNombre}</Text>
           </View>
           {esSuperAdmin(sesion?.rol) && (
             <TouchableOpacity onPress={() => router.push('/usuarios')} style={styles.btnUsuarios}>

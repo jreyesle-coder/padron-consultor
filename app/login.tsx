@@ -44,9 +44,8 @@ export default function LoginScreen() {
           style={styles.logo}
           resizeMode="contain"
         />
-        <Text style={styles.proyectoLabel}>Proyecto Presidencial</Text>
-        <Text style={styles.proyectoNombre}>David Collado</Text>
-        <Text style={styles.equipoTxt}>Equipo de Trabajo · Victor Ogando</Text>
+        <Text style={styles.proyectoLabel}>Trabajo de Campo</Text>
+        <Text style={styles.proyectoNombre}>PRM</Text>
 
         <View style={styles.sep} />
 
